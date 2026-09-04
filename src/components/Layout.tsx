@@ -7,6 +7,7 @@ const navItems = [
   { to: "/", label: "Home" },
   { to: "/ofertas", label: "Ofertas" },
   { to: "/sobre", label: "Sobre" },
+  { to: "/trabalhe-conosco", label: "Trabalhe Conosco" },
   { to: "/contato", label: "Loja Online / Contato" },
 ] as const;
 
