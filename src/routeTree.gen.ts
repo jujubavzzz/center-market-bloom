@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ContatoRouteImport } from './routes/contato'
 import { Route as OfertasRouteImport } from './routes/ofertas'
 import { Route as SobreRouteImport } from './routes/sobre'
+import { Route as TrabalheConoscoRouteImport } from './routes/trabalhe-conosco'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const SobreRoute = SobreRouteImport.update({
   path: '/sobre',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrabalheConoscoRoute = TrabalheConoscoRouteImport.update({
+  id: '/trabalhe-conosco',
+  path: '/trabalhe-conosco',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
+  '/trabalhe-conosco': typeof TrabalheConoscoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
+  '/trabalhe-conosco': typeof TrabalheConoscoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,15 @@ export interface FileRoutesById {
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
+  '/trabalhe-conosco': typeof TrabalheConoscoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/contato' | '/ofertas' | '/sobre'
+  fullPaths: '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/contato' | '/ofertas' | '/sobre'
-  id: '__root__' | '/' | '/contato' | '/ofertas' | '/sobre'
+  to: '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
+  id:
+    '__root__' | '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +77,7 @@ export interface RootRouteChildren {
   ContatoRoute: typeof ContatoRoute
   OfertasRoute: typeof OfertasRoute
   SobreRoute: typeof SobreRoute
+  TrabalheConoscoRoute: typeof TrabalheConoscoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +110,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SobreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/trabalhe-conosco': {
+      id: '/trabalhe-conosco'
+      path: '/trabalhe-conosco'
+      fullPath: '/trabalhe-conosco'
+      preLoaderRoute: typeof TrabalheConoscoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +125,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContatoRoute: ContatoRoute,
   OfertasRoute: OfertasRoute,
   SobreRoute: SobreRoute,
+  TrabalheConoscoRoute: TrabalheConoscoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
