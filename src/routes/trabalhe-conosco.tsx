@@ -34,7 +34,7 @@ const vagas = [
 ];
 
 function TrabalheConosco() {
-  const [nome, setNome] = setState("");
+  const [nome, setNome] = useState("");
   const [vaga, setVaga] = useState(vagas[0]?.area ?? "");
 
   const texto = encodeURIComponent(
