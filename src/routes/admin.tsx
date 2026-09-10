@@ -19,7 +19,8 @@ export const Route = createFileRoute("/admin")({
       { title: "Painel Administrativo — Center Supermercado" },
       {
         name: "description",
-        content: "Área restrita para gerenciar ofertas e vagas do Center Supermercado.",
+        content:
+          "Área restrita para gerenciar ofertas e vagas do Center Supermercado.",
       },
       { name: "robots", content: "noindex" },
     ],
@@ -33,14 +34,34 @@ const inputClass =
 function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [recuperandoSenha, setRecuperandoSenha] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+
       setSession(data.session);
       setCarregando(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (!mounted) return;
+
+      setSession(currentSession);
+
+      if (event === "PASSWORD_RECOVERY") {
+        setRecuperandoSenha(true);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (carregando) {
@@ -51,6 +72,16 @@ function AdminPage() {
     );
   }
 
+  if (recuperandoSenha) {
+    return (
+      <NovaSenha
+        onConcluido={() => {
+          setRecuperandoSenha(false);
+        }}
+      />
+    );
+  }
+
   return session ? <Painel /> : <Login />;
 }
 
@@ -58,15 +89,57 @@ function Login() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
+  const [mensagem, setMensagem] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [enviandoReset, setEnviandoReset] = useState(false);
 
   async function entrar(e: FormEvent) {
     e.preventDefault();
+
     setErro("");
+    setMensagem("");
     setEnviando(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-    if (error) setErro("E-mail ou senha incorretos.");
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: senha,
+    });
+
+    if (error) {
+      setErro("E-mail ou senha incorretos.");
+    }
+
     setEnviando(false);
+  }
+
+  async function esqueciSenha() {
+    setErro("");
+    setMensagem("");
+
+    const emailLimpo = email.trim();
+
+    if (!emailLimpo) {
+      setErro("Digite seu e-mail primeiro.");
+      return;
+    }
+
+    setEnviandoReset(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(emailLimpo, {
+      redirectTo: `${window.location.origin}/admin`,
+    });
+
+    if (error) {
+      setErro(
+        "Não foi possível enviar o e-mail de recuperação. Tente novamente."
+      );
+    } else {
+      setMensagem(
+        "Enviamos um link de recuperação para seu e-mail. Verifique também a caixa de spam."
+      );
+    }
+
+    setEnviandoReset(false);
   }
 
   return (
@@ -75,18 +148,26 @@ function Login() {
         onSubmit={entrar}
         className="w-full max-w-sm rounded-3xl border border-border bg-card p-8 shadow-sm"
       >
-        <img src={logoAsset.url} alt="Center Supermercado" className="mx-auto h-12 w-auto" />
+        <img
+          src={logoAsset.url}
+          alt="Center Supermercado"
+          className="mx-auto h-12 w-auto"
+        />
+
         <h1 className="mt-6 text-center text-2xl font-bold text-primary">
           Painel administrativo
         </h1>
+
         <p className="mt-1 text-center text-sm text-muted-foreground">
           Entre para gerenciar ofertas e vagas.
         </p>
+
         <div className="mt-6 space-y-4">
           <div>
             <label htmlFor="email" className="text-sm font-medium">
               E-mail
             </label>
+
             <input
               id="email"
               type="email"
@@ -94,12 +175,15 @@ function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputClass}
+              autoComplete="email"
             />
           </div>
+
           <div>
             <label htmlFor="senha" className="text-sm font-medium">
               Senha
             </label>
+
             <input
               id="senha"
               type="password"
@@ -107,15 +191,165 @@ function Login() {
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               className={inputClass}
+              autoComplete="current-password"
             />
           </div>
-          {erro && <p className="text-sm text-destructive">{erro}</p>}
+
+          {erro && (
+            <p className="text-sm text-destructive" role="alert">
+              {erro}
+            </p>
+          )}
+
+          {mensagem && (
+            <p className="text-sm text-primary" role="status">
+              {mensagem}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={enviando}
             className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground transition-transform hover:scale-[1.02] disabled:opacity-60"
           >
             {enviando ? "Entrando..." : "Entrar"}
+          </button>
+
+          <button
+            type="button"
+            onClick={esqueciSenha}
+            disabled={enviandoReset}
+            className="w-full text-sm font-medium text-primary underline-offset-4 hover:underline disabled:opacity-60"
+          >
+            {enviandoReset
+              ? "Enviando..."
+              : "Esqueci minha senha"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function NovaSenha({ onConcluido }: { onConcluido: () => void }) {
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmacao, setConfirmacao] = useState("");
+  const [erro, setErro] = useState("");
+  const [mensagem, setMensagem] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvarNovaSenha(e: FormEvent) {
+    e.preventDefault();
+
+    setErro("");
+    setMensagem("");
+
+    if (novaSenha.length < 6) {
+      setErro("A nova senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (novaSenha !== confirmacao) {
+      setErro("As senhas não coincidem.");
+      return;
+    }
+
+    setSalvando(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password: novaSenha,
+    });
+
+    if (error) {
+      setErro(
+        "Não foi possível atualizar a senha. Solicite um novo link de recuperação."
+      );
+      setSalvando(false);
+      return;
+    }
+
+    setMensagem("Senha alterada com sucesso!");
+
+    setTimeout(() => {
+      onConcluido();
+    }, 800);
+
+    setSalvando(false);
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
+      <form
+        onSubmit={salvarNovaSenha}
+        className="w-full max-w-sm rounded-3xl border border-border bg-card p-8 shadow-sm"
+      >
+        <img
+          src={logoAsset.url}
+          alt="Center Supermercado"
+          className="mx-auto h-12 w-auto"
+        />
+
+        <h1 className="mt-6 text-center text-2xl font-bold text-primary">
+          Criar nova senha
+        </h1>
+
+        <p className="mt-1 text-center text-sm text-muted-foreground">
+          Escolha uma nova senha para acessar o painel administrativo.
+        </p>
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <label htmlFor="nova-senha" className="text-sm font-medium">
+              Nova senha
+            </label>
+
+            <input
+              id="nova-senha"
+              type="password"
+              required
+              minLength={6}
+              value={novaSenha}
+              onChange={(e) => setNovaSenha(e.target.value)}
+              className={inputClass}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="confirmacao-senha" className="text-sm font-medium">
+              Confirmar nova senha
+            </label>
+
+            <input
+              id="confirmacao-senha"
+              type="password"
+              required
+              minLength={6}
+              value={confirmacao}
+              onChange={(e) => setConfirmacao(e.target.value)}
+              className={inputClass}
+              autoComplete="new-password"
+            />
+          </div>
+
+          {erro && (
+            <p className="text-sm text-destructive" role="alert">
+              {erro}
+            </p>
+          )}
+
+          {mensagem && (
+            <p className="text-sm text-primary" role="status">
+              {mensagem}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={salvando}
+            className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            {salvando ? "Salvando..." : "Salvar nova senha"}
           </button>
         </div>
       </form>
@@ -138,14 +372,23 @@ function Painel() {
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <img src={logoAsset.url} alt="Center Supermercado" className="h-9 w-auto" />
-            <span className="text-sm font-semibold text-primary">Painel</span>
+            <img
+              src={logoAsset.url}
+              alt="Center Supermercado"
+              className="h-9 w-auto"
+            />
+
+            <span className="text-sm font-semibold text-primary">
+              Painel
+            </span>
           </div>
+
           <button
             onClick={sair}
             className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium hover:border-primary hover:text-primary"
           >
-            <LogOut className="h-4 w-4" /> Sair
+            <LogOut className="h-4 w-4" />
+            Sair
           </button>
         </div>
       </header>
@@ -167,7 +410,9 @@ function Painel() {
           ))}
         </div>
 
-        <div className="mt-8">{aba === "ofertas" ? <AdminOfertas /> : <AdminVagas />}</div>
+        <div className="mt-8">
+          {aba === "ofertas" ? <AdminOfertas /> : <AdminVagas />}
+        </div>
       </div>
     </div>
   );
@@ -230,8 +475,10 @@ function AdminOfertas() {
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
+
     setSalvando(true);
     setErro("");
+
     const payload = {
       nome: form.nome,
       preco: form.preco ? Number(form.preco.replace(",", ".")) : null,
@@ -241,42 +488,66 @@ function AdminOfertas() {
       imagem_url: form.imagem_url || null,
       ativo: form.ativo,
     };
+
     const { error } = editando
-      ? await supabase.from("ofertas").update(payload).eq("id", editando.id)
+      ? await supabase
+          .from("ofertas")
+          .update(payload)
+          .eq("id", editando.id)
       : await supabase.from("ofertas").insert(payload);
+
     setSalvando(false);
+
     if (error) {
       setErro("Não foi possível salvar. Tente novamente.");
       return;
     }
+
     setAberto(false);
     atualizar();
   }
 
   async function alternarAtivo(o: Oferta) {
-    await supabase.from("ofertas").update({ ativo: !o.ativo }).eq("id", o.id);
-    atualizar();
+    const { error } = await supabase
+      .from("ofertas")
+      .update({ ativo: !o.ativo })
+      .eq("id", o.id);
+
+    if (!error) {
+      atualizar();
+    }
   }
 
   async function excluir(o: Oferta) {
     if (!confirm(`Excluir a oferta "${o.nome}"?`)) return;
-    await supabase.from("ofertas").delete().eq("id", o.id);
-    atualizar();
+
+    const { error } = await supabase
+      .from("ofertas")
+      .delete()
+      .eq("id", o.id);
+
+    if (!error) {
+      atualizar();
+    }
   }
 
   return (
     <section>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-primary">Ofertas</h2>
+
         <button
           onClick={abrirNovo}
           className="inline-flex items-center gap-2 rounded-full bg-secondary px-5 py-2 text-sm font-semibold text-secondary-foreground hover:scale-[1.02]"
         >
-          <Plus className="h-4 w-4" /> Nova oferta
+          <Plus className="h-4 w-4" />
+          Nova oferta
         </button>
       </div>
 
-      {isLoading && <p className="mt-6 text-sm text-muted-foreground">Carregando...</p>}
+      {isLoading && (
+        <p className="mt-6 text-sm text-muted-foreground">Carregando...</p>
+      )}
 
       <ul className="mt-6 space-y-3">
         {ofertas.map((o) => (
@@ -291,12 +562,17 @@ function AdminOfertas() {
                 className="h-14 w-14 rounded-xl object-cover"
               />
             )}
+
             <div className="min-w-[200px] flex-1">
               <p className="font-semibold">{o.nome}</p>
+
               <p className="text-sm text-muted-foreground">
-                {[o.dia_semana, o.preco_texto].filter(Boolean).join(" · ")}
+                {[o.dia_semana, o.preco_texto]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
+
             <button
               onClick={() => alternarAtivo(o)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -307,6 +583,7 @@ function AdminOfertas() {
             >
               {o.ativo ? "Ativo" : "Inativo"}
             </button>
+
             <button
               onClick={() => abrirEdicao(o)}
               aria-label="Editar"
@@ -314,6 +591,7 @@ function AdminOfertas() {
             >
               <Pencil className="h-4 w-4" />
             </button>
+
             <button
               onClick={() => excluir(o)}
               aria-label="Excluir"
@@ -326,45 +604,78 @@ function AdminOfertas() {
       </ul>
 
       {aberto && (
-        <Modal titulo={editando ? "Editar oferta" : "Nova oferta"} onClose={() => setAberto(false)}>
+        <Modal
+          titulo={editando ? "Editar oferta" : "Nova oferta"}
+          onClose={() => setAberto(false)}
+        >
           <form onSubmit={salvar} className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Nome do produto</label>
+              <label className="text-sm font-medium">
+                Nome do produto
+              </label>
+
               <input
                 required
                 value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, nome: e.target.value })
+                }
                 className={inputClass}
               />
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-medium">Preço (R$)</label>
+                <label className="text-sm font-medium">
+                  Preço (R$)
+                </label>
+
                 <input
                   value={form.preco}
-                  onChange={(e) => setForm({ ...form, preco: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, preco: e.target.value })
+                  }
                   placeholder="1,00"
                   className={inputClass}
                 />
               </div>
+
               <div>
-                <label className="text-sm font-medium">Unidade / texto do preço</label>
+                <label className="text-sm font-medium">
+                  Unidade / texto do preço
+                </label>
+
                 <input
                   value={form.preco_texto}
-                  onChange={(e) => setForm({ ...form, preco_texto: e.target.value })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      preco_texto: e.target.value,
+                    })
+                  }
                   placeholder="R$ 1,00 a unidade"
                   className={inputClass}
                 />
               </div>
             </div>
+
             <div>
-              <label className="text-sm font-medium">Dia da semana</label>
+              <label className="text-sm font-medium">
+                Dia da semana
+              </label>
+
               <select
                 value={form.dia_semana}
-                onChange={(e) => setForm({ ...form, dia_semana: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    dia_semana: e.target.value,
+                  })
+                }
                 className={inputClass}
               >
                 <option value="">Sem dia específico</option>
+
                 {[
                   "Segunda-feira",
                   "Terça-feira",
@@ -380,33 +691,64 @@ function AdminOfertas() {
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="text-sm font-medium">Descrição</label>
+              <label className="text-sm font-medium">
+                Descrição
+              </label>
+
               <textarea
                 rows={3}
                 value={form.descricao}
-                onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    descricao: e.target.value,
+                  })
+                }
                 className={inputClass}
               />
             </div>
+
             <div>
-              <label className="text-sm font-medium">Link da imagem</label>
+              <label className="text-sm font-medium">
+                Link da imagem
+              </label>
+
               <input
                 value={form.imagem_url}
-                onChange={(e) => setForm({ ...form, imagem_url: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    imagem_url: e.target.value,
+                  })
+                }
                 placeholder="https://..."
                 className={inputClass}
               />
             </div>
+
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
                 checked={form.ativo}
-                onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    ativo: e.target.checked,
+                  })
+                }
               />
+
               Oferta ativa no site
             </label>
-            {erro && <p className="text-sm text-destructive">{erro}</p>}
+
+            {erro && (
+              <p className="text-sm text-destructive" role="alert">
+                {erro}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={salvando}
@@ -425,7 +767,11 @@ function AdminVagas() {
   const queryClient = useQueryClient();
   const { data: vagas = [], isLoading } = useQuery(vagasTodasQuery);
   const [editando, setEditando] = useState<Vaga | null>(null);
-  const [form, setForm] = useState({ cargo: "", descricao: "", ativo: true });
+  const [form, setForm] = useState({
+    cargo: "",
+    descricao: "",
+    ativo: true,
+  });
   const [aberto, setAberto] = useState(false);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -436,54 +782,88 @@ function AdminVagas() {
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
+
     setSalvando(true);
     setErro("");
+
     const payload = {
       cargo: form.cargo,
       descricao: form.descricao || null,
       ativo: form.ativo,
     };
+
     const { error } = editando
-      ? await supabase.from("vagas").update(payload).eq("id", editando.id)
+      ? await supabase
+          .from("vagas")
+          .update(payload)
+          .eq("id", editando.id)
       : await supabase.from("vagas").insert(payload);
+
     setSalvando(false);
+
     if (error) {
       setErro("Não foi possível salvar. Tente novamente.");
       return;
     }
+
     setAberto(false);
     atualizar();
   }
 
   async function alternarAtivo(v: Vaga) {
-    await supabase.from("vagas").update({ ativo: !v.ativo }).eq("id", v.id);
-    atualizar();
+    const { error } = await supabase
+      .from("vagas")
+      .update({ ativo: !v.ativo })
+      .eq("id", v.id);
+
+    if (!error) {
+      atualizar();
+    }
   }
 
   async function excluir(v: Vaga) {
     if (!confirm(`Excluir a vaga "${v.cargo}"?`)) return;
-    await supabase.from("vagas").delete().eq("id", v.id);
-    atualizar();
+
+    const { error } = await supabase
+      .from("vagas")
+      .delete()
+      .eq("id", v.id);
+
+    if (!error) {
+      atualizar();
+    }
   }
 
   return (
     <section>
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-primary">Vagas</h2>
+        <h2 className="text-xl font-bold text-primary">
+          Vagas
+        </h2>
+
         <button
           onClick={() => {
             setEditando(null);
-            setForm({ cargo: "", descricao: "", ativo: true });
+            setForm({
+              cargo: "",
+              descricao: "",
+              ativo: true,
+            });
             setErro("");
             setAberto(true);
           }}
           className="inline-flex items-center gap-2 rounded-full bg-secondary px-5 py-2 text-sm font-semibold text-secondary-foreground hover:scale-[1.02]"
         >
-          <Plus className="h-4 w-4" /> Nova vaga
+          <Plus className="h-4 w-4" />
+          Nova vaga
         </button>
       </div>
 
-      {isLoading && <p className="mt-6 text-sm text-muted-foreground">Carregando...</p>}
+      {isLoading && (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Carregando...
+        </p>
+      )}
 
       <ul className="mt-6 space-y-3">
         {vagas.map((v) => (
@@ -493,22 +873,33 @@ function AdminVagas() {
           >
             <div className="min-w-[200px] flex-1">
               <p className="font-semibold">{v.cargo}</p>
+
               {v.descricao && (
-                <p className="text-sm text-muted-foreground">{v.descricao}</p>
+                <p className="text-sm text-muted-foreground">
+                  {v.descricao}
+                </p>
               )}
             </div>
+
             <button
               onClick={() => alternarAtivo(v)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                v.ativo ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                v.ativo
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
               {v.ativo ? "Ativa" : "Inativa"}
             </button>
+
             <button
               onClick={() => {
                 setEditando(v);
-                setForm({ cargo: v.cargo, descricao: v.descricao ?? "", ativo: v.ativo });
+                setForm({
+                  cargo: v.cargo,
+                  descricao: v.descricao ?? "",
+                  ativo: v.ativo,
+                });
                 setErro("");
                 setAberto(true);
               }}
@@ -517,6 +908,7 @@ function AdminVagas() {
             >
               <Pencil className="h-4 w-4" />
             </button>
+
             <button
               onClick={() => excluir(v)}
               aria-label="Excluir"
@@ -529,35 +921,68 @@ function AdminVagas() {
       </ul>
 
       {aberto && (
-        <Modal titulo={editando ? "Editar vaga" : "Nova vaga"} onClose={() => setAberto(false)}>
+        <Modal
+          titulo={editando ? "Editar vaga" : "Nova vaga"}
+          onClose={() => setAberto(false)}
+        >
           <form onSubmit={salvar} className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Cargo</label>
+              <label className="text-sm font-medium">
+                Cargo
+              </label>
+
               <input
                 required
                 value={form.cargo}
-                onChange={(e) => setForm({ ...form, cargo: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cargo: e.target.value,
+                  })
+                }
                 className={inputClass}
               />
             </div>
+
             <div>
-              <label className="text-sm font-medium">Descrição</label>
+              <label className="text-sm font-medium">
+                Descrição
+              </label>
+
               <textarea
                 rows={3}
                 value={form.descricao}
-                onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    descricao: e.target.value,
+                  })
+                }
                 className={inputClass}
               />
             </div>
+
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
                 checked={form.ativo}
-                onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    ativo: e.target.checked,
+                  })
+                }
               />
+
               Vaga ativa no site
             </label>
-            {erro && <p className="text-sm text-destructive">{erro}</p>}
+
+            {erro && (
+              <p className="text-sm text-destructive" role="alert">
+                {erro}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={salvando}
@@ -585,11 +1010,19 @@ function Modal({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4">
       <div className="mt-10 w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-primary">{titulo}</h3>
-          <button onClick={onClose} aria-label="Fechar" className="rounded-full p-1 hover:bg-muted">
+          <h3 className="text-lg font-bold text-primary">
+            {titulo}
+          </h3>
+
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-full p-1 hover:bg-muted"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
+
         {children}
       </div>
     </div>
