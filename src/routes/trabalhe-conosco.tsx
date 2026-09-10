@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Briefcase, Clock, MapPin, Phone, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { vagasAtivasQuery } from "@/lib/center-data";
 
 export const Route = createFileRoute("/trabalhe-conosco")({
   head: () => ({
@@ -25,17 +27,15 @@ export const Route = createFileRoute("/trabalhe-conosco")({
 
 const WHATSAPP = "5500000000000";
 
-const vagas = [
-  { area: "Açougueiro(a)", desc: "Corte, atendimento e organização do açougue." },
-  { area: "Operador(a) de Caixa", desc: "Atendimento ao cliente no checkout e organização." },
-  { area: "Repositor(a)", desc: "Organização de prateleiras e reposição de produtos." },
-  { area: "Atendente de Padaria", desc: "Venda de pães, bolos e produtos da padaria." },
-  { area: "Ajudante Geral", desc: "Apoio em diversos setores do mercado." },
-];
 
 function TrabalheConosco() {
+  const { data: vagas = [] } = useQuery(vagasAtivasQuery);
   const [nome, setNome] = useState("");
-  const [vaga, setVaga] = useState(vagas[0]?.area ?? "");
+  const [vaga, setVaga] = useState("");
+
+  useEffect(() => {
+    if (!vaga && vagas.length > 0) setVaga(vagas[0]!.cargo);
+  }, [vagas, vaga]);
 
   const texto = encodeURIComponent(
     `Olá, Center Supermercado! Meu nome é ${nome || "..."} e gostaria de enviar meu currículo para a vaga de ${vaga || "..."}.`,
@@ -58,18 +58,25 @@ function TrabalheConosco() {
             <Briefcase className="h-6 w-6" /> Áreas em aberto
           </h2>
           <ul className="mt-6 space-y-4">
+            {vagas.length === 0 && (
+              <li className="text-sm text-muted-foreground">
+                No momento não temos vagas em aberto. Volte em breve!
+              </li>
+            )}
             {vagas.map((v) => (
               <li
-                key={v.area}
-                onClick={() => setVaga(v.area)}
+                key={v.id}
+                onClick={() => setVaga(v.cargo)}
                 className={`cursor-pointer rounded-xl border p-4 transition-all ${
-                  vaga === v.area
+                  vaga === v.cargo
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50"
                 }`}
               >
-                <h3 className="font-semibold text-foreground">{v.area}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{v.desc}</p>
+                <h3 className="font-semibold text-foreground">{v.cargo}</h3>
+                {v.descricao && (
+                  <p className="mt-1 text-sm text-muted-foreground">{v.descricao}</p>
+                )}
               </li>
             ))}
           </ul>
@@ -105,8 +112,8 @@ function TrabalheConosco() {
                   className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 >
                   {vagas.map((v) => (
-                    <option key={v.area} value={v.area}>
-                      {v.area}
+                    <option key={v.id} value={v.cargo}>
+                      {v.cargo}
                     </option>
                   ))}
                 </select>

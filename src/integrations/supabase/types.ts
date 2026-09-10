@@ -14,7 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ofertas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao: string | null
+          dia_semana: string | null
+          id: string
+          imagem_url: string | null
+          nome: string
+          ordem: number
+          preco: number | null
+          preco_texto: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          dia_semana?: string | null
+          id?: string
+          imagem_url?: string | null
+          nome: string
+          ordem?: number
+          preco?: number | null
+          preco_texto?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          dia_semana?: string | null
+          id?: string
+          imagem_url?: string | null
+          nome?: string
+          ordem?: number
+          preco?: number | null
+          preco_texto?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vagas: {
+        Row: {
+          ativo: boolean
+          cargo: string
+          created_at: string
+          descricao: string | null
+          id: string
+          ordem: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cargo: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          ordem?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cargo?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          ordem?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

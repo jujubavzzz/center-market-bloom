@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ContatoRouteImport } from './routes/contato'
 import { Route as OfertasRouteImport } from './routes/ofertas'
 import { Route as SobreRouteImport } from './routes/sobre'
@@ -18,6 +19,11 @@ import { Route as TrabalheConoscoRouteImport } from './routes/trabalhe-conosco'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContatoRoute = ContatoRouteImport.update({
@@ -43,6 +49,7 @@ const TrabalheConoscoRoute = TrabalheConoscoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/contato': typeof ContatoRoute
   '/ofertas': typeof OfertasRoute
   '/sobre': typeof SobreRoute
@@ -65,15 +74,23 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
+  fullPaths:
+    '/' | '/admin' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
+  to: '/' | '/admin' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
   id:
-    '__root__' | '/' | '/contato' | '/ofertas' | '/sobre' | '/trabalhe-conosco'
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/contato'
+    | '/ofertas'
+    | '/sobre'
+    | '/trabalhe-conosco'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   ContatoRoute: typeof ContatoRoute
   OfertasRoute: typeof OfertasRoute
   SobreRoute: typeof SobreRoute
@@ -87,6 +104,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contato': {
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   ContatoRoute: ContatoRoute,
   OfertasRoute: OfertasRoute,
   SobreRoute: SobreRoute,
