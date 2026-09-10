@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import esfirraImg from "@/assets/oferta-esfirra.jpg";
 import verdurasImg from "@/assets/oferta-verduras.jpg";
 import carnesImg from "@/assets/oferta-carnes.jpg";
+import { formatarPreco, ofertasAtivasQuery } from "@/lib/center-data";
 
 export const Route = createFileRoute("/ofertas")({
   head: () => ({
@@ -23,34 +25,11 @@ export const Route = createFileRoute("/ofertas")({
   component: Ofertas,
 });
 
-const ofertas = [
-  {
-    dia: "Quarta-feira",
-    titulo: "Esfirra por R$ 1",
-    texto:
-      "Esfirras assadas na hora na nossa padaria: carne, frango, queijo e calabresa. Preço único o dia todo, enquanto durar o estoque.",
-    img: esfirraImg,
-    destaque: "R$ 1,00 a unidade",
-  },
-  {
-    dia: "Quinta-feira",
-    titulo: "Dia das Verduras",
-    texto:
-      "Hortifrúti selecionado com descontos especiais: alface, couve, tomate, cenoura e muito mais fresquinho direto do produtor.",
-    img: verdurasImg,
-    destaque: "Descontos no hortifrúti",
-  },
-  {
-    dia: "Sexta-feira",
-    titulo: "Promoção de Carnes",
-    texto:
-      "Nosso açougue prepara os melhores cortes para o seu fim de semana: picanha, alcatra, costela e frango com preço de sexta.",
-    img: carnesImg,
-    destaque: "Cortes selecionados",
-  },
-];
+const imagensPadrao = [esfirraImg, verdurasImg, carnesImg];
 
 function Ofertas() {
+  const { data: ofertas = [], isLoading } = useQuery(ofertasAtivasQuery);
+
   return (
     <Layout>
       <section className="bg-primary py-14 text-primary-foreground">
@@ -63,15 +42,23 @@ function Ofertas() {
       </section>
 
       <section className="mx-auto max-w-6xl space-y-12 px-4 py-16">
+        {isLoading && (
+          <p className="text-center text-muted-foreground">Carregando ofertas...</p>
+        )}
+        {!isLoading && ofertas.length === 0 && (
+          <p className="text-center text-muted-foreground">
+            Nenhuma oferta no momento. Volte em breve!
+          </p>
+        )}
         {ofertas.map((o, i) => (
           <article
-            key={o.dia}
+            key={o.id}
             className={`grid items-center gap-8 md:grid-cols-2 ${i % 2 === 1 ? "md:[&>figure]:order-2" : ""}`}
           >
             <figure className="overflow-hidden rounded-3xl shadow-sm">
               <img
-                src={o.img}
-                alt={o.titulo}
+                src={o.imagem_url || imagensPadrao[i % imagensPadrao.length]}
+                alt={o.nome}
                 width={800}
                 height={600}
                 loading="lazy"
@@ -79,12 +66,14 @@ function Ofertas() {
               />
             </figure>
             <div>
-              <span className="inline-block rounded-full bg-secondary px-4 py-1 text-sm font-semibold text-secondary-foreground">
-                {o.dia}
-              </span>
-              <h2 className="mt-4 text-3xl font-bold text-primary">{o.titulo}</h2>
-              <p className="mt-2 text-lg font-semibold">{o.destaque}</p>
-              <p className="mt-3 text-muted-foreground">{o.texto}</p>
+              {o.dia_semana && (
+                <span className="inline-block rounded-full bg-secondary px-4 py-1 text-sm font-semibold text-secondary-foreground">
+                  {o.dia_semana}
+                </span>
+              )}
+              <h2 className="mt-4 text-3xl font-bold text-primary">{o.nome}</h2>
+              <p className="mt-2 text-lg font-semibold">{formatarPreco(o)}</p>
+              {o.descricao && <p className="mt-3 text-muted-foreground">{o.descricao}</p>}
             </div>
           </article>
         ))}
