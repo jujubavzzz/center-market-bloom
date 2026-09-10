@@ -1,1035 +1,124 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { Loader2, LogOut, Pencil, Plus, Trash2, X } from "lucide-react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import logoAsset from "@/assets/logo-center.png.asset.json";
-import {
-  ofertasTodasQuery,
-  vagasTodasQuery,
-  type Oferta,
-  type Vaga,
-} from "@/lib/center-data";
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  HeadContent,
+  Scripts,
+} from "@tanstack/react-router";
+import { useEffect, type ReactNode } from "react";
 
-export const Route = createFileRoute("/admin")({
-  ssr: false,
+import appCss from "../styles.css?url";
+import { reportLovableError } from "../lib/lovable-error-reporting";
+
+function NotFoundComponent() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-7xl font-bold text-foreground">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The page you're looking for doesn't exist or has been moved.
+        </p>
+        <div className="mt-6">
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Go home
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+  console.error(error);
+  const router = useRouter();
+  useEffect(() => {
+    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+  }, [error]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          This page didn't load
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Something went wrong on our end. You can try refreshing or head back home.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <button
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Try again
+          </button>
+          <a
+            href="/"
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            Go home
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
-      { title: "Painel Administrativo — Center Supermercado" },
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "Center Supermercado" },
+      { name: "description", content: "O mercado da sua família, pertinho de você." },
+      { property: "og:title", content: "Center Supermercado" },
+      { property: "og:description", content: "O mercado da sua família, pertinho de você." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [
       {
-        name: "description",
-        content:
-          "Área restrita para gerenciar ofertas e vagas do Center Supermercado.",
+        rel: "stylesheet",
+        href: appCss,
       },
-      { name: "robots", content: "noindex" },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
   }),
-  component: AdminPage,
+  shellComponent: RootShell,
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
 });
 
-const inputClass =
-  "mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary";
-
-function AdminPage() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [recuperandoSenha, setRecuperandoSenha] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-
-      setSession(data.session);
-      setCarregando(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      if (!mounted) return;
-
-      setSession(currentSession);
-
-      if (event === "PASSWORD_RECOVERY") {
-        setRecuperandoSenha(true);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  if (carregando) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (recuperandoSenha) {
-    return (
-      <NovaSenha
-        onConcluido={() => {
-          setRecuperandoSenha(false);
-        }}
-      />
-    );
-  }
-
-  return session ? <Painel /> : <Login />;
-}
-
-function Login() {
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState("");
-  const [mensagem, setMensagem] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [enviandoReset, setEnviandoReset] = useState(false);
-
-  async function entrar(e: FormEvent) {
-    e.preventDefault();
-
-    setErro("");
-    setMensagem("");
-    setEnviando(true);
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: senha,
-    });
-
-    if (error) {
-      setErro("E-mail ou senha incorretos.");
-    }
-
-    setEnviando(false);
-  }
-
-  async function esqueciSenha() {
-    setErro("");
-    setMensagem("");
-
-    const emailLimpo = email.trim();
-
-    if (!emailLimpo) {
-      setErro("Digite seu e-mail primeiro.");
-      return;
-    }
-
-    setEnviandoReset(true);
-
-    const { error } = await supabase.auth.resetPasswordForEmail(emailLimpo, {
-      redirectTo: `${window.location.origin}/admin`,
-    });
-
-    if (error) {
-      setErro(
-        "Não foi possível enviar o e-mail de recuperação. Tente novamente."
-      );
-    } else {
-      setMensagem(
-        "Enviamos um link de recuperação para seu e-mail. Verifique também a caixa de spam."
-      );
-    }
-
-    setEnviandoReset(false);
-  }
-
+function RootShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-      <form
-        onSubmit={entrar}
-        className="w-full max-w-sm rounded-3xl border border-border bg-card p-8 shadow-sm"
-      >
-        <img
-          src={logoAsset.url}
-          alt="Center Supermercado"
-          className="mx-auto h-12 w-auto"
-        />
-
-        <h1 className="mt-6 text-center text-2xl font-bold text-primary">
-          Painel administrativo
-        </h1>
-
-        <p className="mt-1 text-center text-sm text-muted-foreground">
-          Entre para gerenciar ofertas e vagas.
-        </p>
-
-        <div className="mt-6 space-y-4">
-          <div>
-            <label htmlFor="email" className="text-sm font-medium">
-              E-mail
-            </label>
-
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
-              autoComplete="email"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="senha" className="text-sm font-medium">
-              Senha
-            </label>
-
-            <input
-              id="senha"
-              type="password"
-              required
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className={inputClass}
-              autoComplete="current-password"
-            />
-          </div>
-
-          {erro && (
-            <p className="text-sm text-destructive" role="alert">
-              {erro}
-            </p>
-          )}
-
-          {mensagem && (
-            <p className="text-sm text-primary" role="status">
-              {mensagem}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando}
-            className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground transition-transform hover:scale-[1.02] disabled:opacity-60"
-          >
-            {enviando ? "Entrando..." : "Entrar"}
-          </button>
-
-          <button
-            type="button"
-            onClick={esqueciSenha}
-            disabled={enviandoReset}
-            className="w-full text-sm font-medium text-primary underline-offset-4 hover:underline disabled:opacity-60"
-          >
-            {enviandoReset
-              ? "Enviando..."
-              : "Esqueci minha senha"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function NovaSenha({ onConcluido }: { onConcluido: () => void }) {
-  const [novaSenha, setNovaSenha] = useState("");
-  const [confirmacao, setConfirmacao] = useState("");
-  const [erro, setErro] = useState("");
-  const [mensagem, setMensagem] = useState("");
-  const [salvando, setSalvando] = useState(false);
-
-  async function salvarNovaSenha(e: FormEvent) {
-    e.preventDefault();
-
-    setErro("");
-    setMensagem("");
-
-    if (novaSenha.length < 6) {
-      setErro("A nova senha deve ter pelo menos 6 caracteres.");
-      return;
-    }
-
-    if (novaSenha !== confirmacao) {
-      setErro("As senhas não coincidem.");
-      return;
-    }
-
-    setSalvando(true);
-
-    const { error } = await supabase.auth.updateUser({
-      password: novaSenha,
-    });
-
-    if (error) {
-      setErro(
-        "Não foi possível atualizar a senha. Solicite um novo link de recuperação."
-      );
-      setSalvando(false);
-      return;
-    }
-
-    setMensagem("Senha alterada com sucesso!");
-
-    setTimeout(() => {
-      onConcluido();
-    }, 800);
-
-    setSalvando(false);
-  }
-
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-      <form
-        onSubmit={salvarNovaSenha}
-        className="w-full max-w-sm rounded-3xl border border-border bg-card p-8 shadow-sm"
-      >
-        <img
-          src={logoAsset.url}
-          alt="Center Supermercado"
-          className="mx-auto h-12 w-auto"
-        />
-
-        <h1 className="mt-6 text-center text-2xl font-bold text-primary">
-          Criar nova senha
-        </h1>
-
-        <p className="mt-1 text-center text-sm text-muted-foreground">
-          Escolha uma nova senha para acessar o painel administrativo.
-        </p>
-
-        <div className="mt-6 space-y-4">
-          <div>
-            <label htmlFor="nova-senha" className="text-sm font-medium">
-              Nova senha
-            </label>
-
-            <input
-              id="nova-senha"
-              type="password"
-              required
-              minLength={6}
-              value={novaSenha}
-              onChange={(e) => setNovaSenha(e.target.value)}
-              className={inputClass}
-              autoComplete="new-password"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="confirmacao-senha" className="text-sm font-medium">
-              Confirmar nova senha
-            </label>
-
-            <input
-              id="confirmacao-senha"
-              type="password"
-              required
-              minLength={6}
-              value={confirmacao}
-              onChange={(e) => setConfirmacao(e.target.value)}
-              className={inputClass}
-              autoComplete="new-password"
-            />
-          </div>
-
-          {erro && (
-            <p className="text-sm text-destructive" role="alert">
-              {erro}
-            </p>
-          )}
-
-          {mensagem && (
-            <p className="text-sm text-primary" role="status">
-              {mensagem}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={salvando}
-            className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60"
-          >
-            {salvando ? "Salvando..." : "Salvar nova senha"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function Painel() {
-  const [aba, setAba] = useState<"ofertas" | "vagas">("ofertas");
-  const queryClient = useQueryClient();
-
-  async function sair() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-  }
-
-  return (
-    <div className="min-h-screen bg-muted">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <img
-              src={logoAsset.url}
-              alt="Center Supermercado"
-              className="h-9 w-auto"
-            />
-
-            <span className="text-sm font-semibold text-primary">
-              Painel
-            </span>
-          </div>
-
-          <button
-            onClick={sair}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium hover:border-primary hover:text-primary"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair
-          </button>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <div className="flex gap-2">
-          {(["ofertas", "vagas"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setAba(t)}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                aba === t
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground/70 hover:text-primary"
-              }`}
-            >
-              {t === "ofertas" ? "Ofertas" : "Trabalhe Conosco"}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-8">
-          {aba === "ofertas" ? <AdminOfertas /> : <AdminVagas />}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type OfertaForm = {
-  nome: string;
-  preco: string;
-  preco_texto: string;
-  dia_semana: string;
-  descricao: string;
-  imagem_url: string;
-  ativo: boolean;
-};
-
-const ofertaVazia: OfertaForm = {
-  nome: "",
-  preco: "",
-  preco_texto: "",
-  dia_semana: "",
-  descricao: "",
-  imagem_url: "",
-  ativo: true,
-};
-
-function AdminOfertas() {
-  const queryClient = useQueryClient();
-  const { data: ofertas = [], isLoading } = useQuery(ofertasTodasQuery);
-  const [editando, setEditando] = useState<Oferta | null>(null);
-  const [form, setForm] = useState<OfertaForm>(ofertaVazia);
-  const [aberto, setAberto] = useState(false);
-  const [erro, setErro] = useState("");
-  const [salvando, setSalvando] = useState(false);
-
-  function atualizar() {
-    queryClient.invalidateQueries({ queryKey: ["ofertas"] });
-  }
-
-  function abrirNovo() {
-    setEditando(null);
-    setForm(ofertaVazia);
-    setErro("");
-    setAberto(true);
-  }
-
-  function abrirEdicao(o: Oferta) {
-    setEditando(o);
-    setForm({
-      nome: o.nome,
-      preco: o.preco != null ? String(o.preco) : "",
-      preco_texto: o.preco_texto ?? "",
-      dia_semana: o.dia_semana ?? "",
-      descricao: o.descricao ?? "",
-      imagem_url: o.imagem_url ?? "",
-      ativo: o.ativo,
-    });
-    setErro("");
-    setAberto(true);
-  }
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault();
-
-    setSalvando(true);
-    setErro("");
-
-    const payload = {
-      nome: form.nome,
-      preco: form.preco ? Number(form.preco.replace(",", ".")) : null,
-      preco_texto: form.preco_texto || null,
-      dia_semana: form.dia_semana || null,
-      descricao: form.descricao || null,
-      imagem_url: form.imagem_url || null,
-      ativo: form.ativo,
-    };
-
-    const { error } = editando
-      ? await supabase
-          .from("ofertas")
-          .update(payload)
-          .eq("id", editando.id)
-      : await supabase.from("ofertas").insert(payload);
-
-    setSalvando(false);
-
-    if (error) {
-      setErro("Não foi possível salvar. Tente novamente.");
-      return;
-    }
-
-    setAberto(false);
-    atualizar();
-  }
-
-  async function alternarAtivo(o: Oferta) {
-    const { error } = await supabase
-      .from("ofertas")
-      .update({ ativo: !o.ativo })
-      .eq("id", o.id);
-
-    if (!error) {
-      atualizar();
-    }
-  }
-
-  async function excluir(o: Oferta) {
-    if (!confirm(`Excluir a oferta "${o.nome}"?`)) return;
-
-    const { error } = await supabase
-      .from("ofertas")
-      .delete()
-      .eq("id", o.id);
-
-    if (!error) {
-      atualizar();
-    }
-  }
-
-  return (
-    <section>
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-primary">Ofertas</h2>
-
-        <button
-          onClick={abrirNovo}
-          className="inline-flex items-center gap-2 rounded-full bg-secondary px-5 py-2 text-sm font-semibold text-secondary-foreground hover:scale-[1.02]"
-        >
-          <Plus className="h-4 w-4" />
-          Nova oferta
-        </button>
-      </div>
-
-      {isLoading && (
-        <p className="mt-6 text-sm text-muted-foreground">Carregando...</p>
-      )}
-
-      <ul className="mt-6 space-y-3">
-        {ofertas.map((o) => (
-          <li
-            key={o.id}
-            className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-4"
-          >
-            {o.imagem_url && (
-              <img
-                src={o.imagem_url}
-                alt={o.nome}
-                className="h-14 w-14 rounded-xl object-cover"
-              />
-            )}
-
-            <div className="min-w-[200px] flex-1">
-              <p className="font-semibold">{o.nome}</p>
-
-              <p className="text-sm text-muted-foreground">
-                {[o.dia_semana, o.preco_texto]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-
-            <button
-              onClick={() => alternarAtivo(o)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                o.ativo
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {o.ativo ? "Ativo" : "Inativo"}
-            </button>
-
-            <button
-              onClick={() => abrirEdicao(o)}
-              aria-label="Editar"
-              className="rounded-full border border-border p-2 hover:border-primary hover:text-primary"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-
-            <button
-              onClick={() => excluir(o)}
-              aria-label="Excluir"
-              className="rounded-full border border-border p-2 text-destructive hover:border-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {aberto && (
-        <Modal
-          titulo={editando ? "Editar oferta" : "Nova oferta"}
-          onClose={() => setAberto(false)}
-        >
-          <form onSubmit={salvar} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">
-                Nome do produto
-              </label>
-
-              <input
-                required
-                value={form.nome}
-                onChange={(e) =>
-                  setForm({ ...form, nome: e.target.value })
-                }
-                className={inputClass}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium">
-                  Preço (R$)
-                </label>
-
-                <input
-                  value={form.preco}
-                  onChange={(e) =>
-                    setForm({ ...form, preco: e.target.value })
-                  }
-                  placeholder="1,00"
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">
-                  Unidade / texto do preço
-                </label>
-
-                <input
-                  value={form.preco_texto}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      preco_texto: e.target.value,
-                    })
-                  }
-                  placeholder="R$ 1,00 a unidade"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Dia da semana
-              </label>
-
-              <select
-                value={form.dia_semana}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    dia_semana: e.target.value,
-                  })
-                }
-                className={inputClass}
-              >
-                <option value="">Sem dia específico</option>
-
-                {[
-                  "Segunda-feira",
-                  "Terça-feira",
-                  "Quarta-feira",
-                  "Quinta-feira",
-                  "Sexta-feira",
-                  "Sábado",
-                  "Domingo",
-                ].map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Descrição
-              </label>
-
-              <textarea
-                rows={3}
-                value={form.descricao}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    descricao: e.target.value,
-                  })
-                }
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Link da imagem
-              </label>
-
-              <input
-                value={form.imagem_url}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    imagem_url: e.target.value,
-                  })
-                }
-                placeholder="https://..."
-                className={inputClass}
-              />
-            </div>
-
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={form.ativo}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    ativo: e.target.checked,
-                  })
-                }
-              />
-
-              Oferta ativa no site
-            </label>
-
-            {erro && (
-              <p className="text-sm text-destructive" role="alert">
-                {erro}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={salvando}
-              className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {salvando ? "Salvando..." : "Salvar"}
-            </button>
-          </form>
-        </Modal>
-      )}
-    </section>
-  );
-}
-
-function AdminVagas() {
-  const queryClient = useQueryClient();
-  const { data: vagas = [], isLoading } = useQuery(vagasTodasQuery);
-  const [editando, setEditando] = useState<Vaga | null>(null);
-  const [form, setForm] = useState({
-    cargo: "",
-    descricao: "",
-    ativo: true,
-  });
-  const [aberto, setAberto] = useState(false);
-  const [erro, setErro] = useState("");
-  const [salvando, setSalvando] = useState(false);
-
-  function atualizar() {
-    queryClient.invalidateQueries({ queryKey: ["vagas"] });
-  }
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault();
-
-    setSalvando(true);
-    setErro("");
-
-    const payload = {
-      cargo: form.cargo,
-      descricao: form.descricao || null,
-      ativo: form.ativo,
-    };
-
-    const { error } = editando
-      ? await supabase
-          .from("vagas")
-          .update(payload)
-          .eq("id", editando.id)
-      : await supabase.from("vagas").insert(payload);
-
-    setSalvando(false);
-
-    if (error) {
-      setErro("Não foi possível salvar. Tente novamente.");
-      return;
-    }
-
-    setAberto(false);
-    atualizar();
-  }
-
-  async function alternarAtivo(v: Vaga) {
-    const { error } = await supabase
-      .from("vagas")
-      .update({ ativo: !v.ativo })
-      .eq("id", v.id);
-
-    if (!error) {
-      atualizar();
-    }
-  }
-
-  async function excluir(v: Vaga) {
-    if (!confirm(`Excluir a vaga "${v.cargo}"?`)) return;
-
-    const { error } = await supabase
-      .from("vagas")
-      .delete()
-      .eq("id", v.id);
-
-    if (!error) {
-      atualizar();
-    }
-  }
-
-  return (
-    <section>
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-primary">
-          Vagas
-        </h2>
-
-        <button
-          onClick={() => {
-            setEditando(null);
-            setForm({
-              cargo: "",
-              descricao: "",
-              ativo: true,
-            });
-            setErro("");
-            setAberto(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-full bg-secondary px-5 py-2 text-sm font-semibold text-secondary-foreground hover:scale-[1.02]"
-        >
-          <Plus className="h-4 w-4" />
-          Nova vaga
-        </button>
-      </div>
-
-      {isLoading && (
-        <p className="mt-6 text-sm text-muted-foreground">
-          Carregando...
-        </p>
-      )}
-
-      <ul className="mt-6 space-y-3">
-        {vagas.map((v) => (
-          <li
-            key={v.id}
-            className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-4"
-          >
-            <div className="min-w-[200px] flex-1">
-              <p className="font-semibold">{v.cargo}</p>
-
-              {v.descricao && (
-                <p className="text-sm text-muted-foreground">
-                  {v.descricao}
-                </p>
-              )}
-            </div>
-
-            <button
-              onClick={() => alternarAtivo(v)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                v.ativo
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {v.ativo ? "Ativa" : "Inativa"}
-            </button>
-
-            <button
-              onClick={() => {
-                setEditando(v);
-                setForm({
-                  cargo: v.cargo,
-                  descricao: v.descricao ?? "",
-                  ativo: v.ativo,
-                });
-                setErro("");
-                setAberto(true);
-              }}
-              aria-label="Editar"
-              className="rounded-full border border-border p-2 hover:border-primary hover:text-primary"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-
-            <button
-              onClick={() => excluir(v)}
-              aria-label="Excluir"
-              className="rounded-full border border-border p-2 text-destructive hover:border-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {aberto && (
-        <Modal
-          titulo={editando ? "Editar vaga" : "Nova vaga"}
-          onClose={() => setAberto(false)}
-        >
-          <form onSubmit={salvar} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">
-                Cargo
-              </label>
-
-              <input
-                required
-                value={form.cargo}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    cargo: e.target.value,
-                  })
-                }
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Descrição
-              </label>
-
-              <textarea
-                rows={3}
-                value={form.descricao}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    descricao: e.target.value,
-                  })
-                }
-                className={inputClass}
-              />
-            </div>
-
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={form.ativo}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    ativo: e.target.checked,
-                  })
-                }
-              />
-
-              Vaga ativa no site
-            </label>
-
-            {erro && (
-              <p className="text-sm text-destructive" role="alert">
-                {erro}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={salvando}
-              className="w-full rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {salvando ? "Salvando..." : "Salvar"}
-            </button>
-          </form>
-        </Modal>
-      )}
-    </section>
-  );
-}
-
-function Modal({
-  titulo,
-  onClose,
-  children,
-}: {
-  titulo: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4">
-      <div className="mt-10 w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-primary">
-            {titulo}
-          </h3>
-
-          <button
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-full p-1 hover:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
         {children}
-      </div>
-    </div>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+      <Outlet />
+    </QueryClientProvider>
   );
 }
